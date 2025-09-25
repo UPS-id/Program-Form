@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manajer Jadwal Interaktif</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
+
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+            background-color: #f4f7f6;
+        }
+        .main-header {
+            color: #333;
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        .form-card, .schedule-card {
+            background-color: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+            padding: 1.5rem;
+            height: 100%;
+        }
+        .btn-primary {
+            background-color: #007bff;
+            border: none;
+            transition: background-color 0.2s;
+        }
+        .btn-primary:hover {
+            background-color: #0056b3;
+        }
+        /* Style untuk event di kalender */
+        .fc-event {
+            cursor: pointer;
+            border: none !important;
+            color: white !important;
+            padding: 5px;
+        }
+        .priority-tinggi { background-color: #dc3545 !important; }
+        .priority-sedang { background-color: #ffc107 !important; color: #333 !important; }
+        .priority-rendah { background-color: #6c757d !important; }
+        
+        /* Modal Style */
+        .modal-header {
+            border-bottom: none;
+        }
+        .modal-footer {
+            border-top: none;
+        }
+    </style>
+</head>
+<body class="py-4">
+
+    <div class="container-fluid">
+        <h1 class="main-header">🗓️ Manajer Jadwal Interaktif</h1>
+
+        <div class="row g-4">
+            <div class="col-lg-4">
+                <div class="form-card">
+                    <h4><i class="fas fa-plus-circle me-2"></i>Tambah Program Baru</h4>
+                    <hr>
+                    <form id="programForm" class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label">Nama Program</label>
+                            <input type="text" id="namaProgram" class="form-control" required placeholder="Contoh: Belajar JavaScript">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Tanggal Mulai</label>
+                            <input type="date" id="tanggalMulai" class="form-control" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Tanggal Selesai</label>
+                            <input type="date" id="tanggalSelesai" class="form-control" required>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Tingkat Kepentingan</label>
+                            <select id="kepentingan" class="form-select">
+                                <option>Tinggi</option>
+                                <option>Sedang</option>
+                                <option>Rendah</option>
+                            </select>
+                        </div>
+                        <div class="col-12 text-center">
+                            <button type="submit" class="btn btn-primary w-100 py-2"><i class="fas fa-save me-2"></i>Simpan Jadwal</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <div class="col-lg-8">
+                <div class="schedule-card">
+                    <div id='calendar'></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="detailModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalTitle">Detail Program</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p><strong>Tanggal:</strong> <span id="modalDate"></span></p>
+                    <p><strong>Prioritas:</strong> <span id="modalPriority"></span></p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Tutup</button>
+                    <button type="button" class="btn btn-danger" id="deleteButton"><i class="fas fa-trash me-2"></i>Hapus Program</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast-container position-fixed bottom-0 end-0 p-3">
+        <div id="liveToast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="toast-header">
+                <i class="fas fa-check-circle text-success me-2"></i>
+                <strong class="me-auto">Notifikasi</strong>
+                <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
+            </div>
+            <div class="toast-body" id="toast-body"></div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js'></script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Inisialisasi komponen
+            const calendarEl = document.getElementById('calendar');
+            const detailModal = new bootstrap.Modal(document.getElementById('detailModal'));
+            const liveToast = new bootstrap.Toast(document.getElementById('liveToast'));
+
+            // Mengambil data dari localStorage atau array kosong
+            let programs = JSON.parse(localStorage.getItem('programs')) || [];
+
+            // Inisialisasi FullCalendar
+            const calendar = new FullCalendar.Calendar(calendarEl, {
+                initialView: 'dayGridMonth',
+                headerToolbar: {
+                    left: 'prev,next today',
+                    center: 'title',
+                    right: 'dayGridMonth,timeGridWeek,listWeek'
+                },
+                locale: 'id',
+                buttonText: {
+                    today: 'Hari Ini',
+                    month: 'Bulan',
+                    week: 'Minggu',
+                    list: 'Daftar'
+                },
+                events: [], // Events akan di-load dari fungsi render
+                eventClick: function(info) {
+                    // Tampilkan detail di modal ketika event diklik
+                    const prog = info.event.extendedProps.originalProgram;
+                    document.getElementById('modalTitle').innerText = prog.nama;
+                    document.getElementById('modalDate').innerText = `${prog.mulai} s/d ${prog.selesai}`;
+                    
+                    const priorityBadge = document.getElementById('modalPriority');
+                    priorityBadge.innerHTML = `<span class="badge bg-${getPriorityClass(prog.kepentingan)}">${prog.kepentingan}</span>`;
+
+                    document.getElementById('deleteButton').onclick = () => {
+                        deleteProgram(prog.id);
+                        detailModal.hide();
+                    };
+                    detailModal.show();
+                }
+            });
+            calendar.render();
+
+            // Fungsi untuk menampilkan notifikasi toast
+            function showToast(message) {
+                document.getElementById('toast-body').innerText = message;
+                liveToast.show();
+            }
+            
+            // Listener untuk form submit
+            document.getElementById('programForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                const nama = document.getElementById('namaProgram').value.trim();
+                const mulai = document.getElementById('tanggalMulai').value;
+                const selesai = document.getElementById('tanggalSelesai').value;
+                const kepentingan = document.getElementById('kepentingan').value;
+
+                // Validasi tanggal
+                if (new Date(selesai) < new Date(mulai)) {
+                    alert("Tanggal Selesai tidak boleh sebelum Tanggal Mulai.");
+                    return;
+                }
+
+                programs.push({
+                    id: Date.now(), // ID unik untuk setiap program
+                    nama,
+                    mulai,
+                    selesai,
+                    kepentingan
+                });
+
+                localStorage.setItem('programs', JSON.stringify(programs));
+                this.reset();
+                renderCalendar();
+                showToast(`Program "${nama}" berhasil ditambahkan!`);
+            });
+
+            // Fungsi untuk menghapus program
+            function deleteProgram(id) {
+                const programToDelete = programs.find(p => p.id === id);
+                programs = programs.filter(p => p.id !== id);
+                localStorage.setItem('programs', JSON.stringify(programs));
+                renderCalendar();
+                showToast(`Program "${programToDelete.nama}" telah dihapus.`);
+            }
+
+            // Fungsi untuk mendapatkan kelas CSS berdasarkan prioritas
+            function getPriorityClass(kepentingan) {
+                if (kepentingan === 'Tinggi') return 'danger';
+                if (kepentingan === 'Sedang') return 'warning';
+                return 'secondary';
+            }
+
+            // Fungsi utama untuk me-render program ke kalender
+            function renderCalendar() {
+                // Hapus semua event yang ada
+                calendar.getEvents().forEach(event => event.remove());
+
+                // Format data program menjadi format event FullCalendar
+                const calendarEvents = programs.map(prog => {
+                    // FullCalendar memerlukan tanggal selesai menjadi +1 hari untuk tampilan all-day
+                    const endDate = new Date(prog.selesai);
+                    endDate.setDate(endDate.getDate() + 1);
+
+                    return {
+                        title: prog.nama,
+                        start: prog.mulai,
+                        end: endDate.toISOString().split('T')[0], // format YYYY-MM-DD
+                        classNames: [`priority-${prog.kepentingan.toLowerCase()}`],
+                        extendedProps: {
+                            originalProgram: prog
+                        }
+                    };
+                });
+
+                // Tambahkan event baru ke kalender
+                calendar.addEventSource(calendarEvents);
+            }
+
+            // Render pertama kali saat halaman dimuat
+            renderCalendar();
+        });
+    </script>
+</body>
+</html>
